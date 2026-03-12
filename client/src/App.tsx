@@ -3,6 +3,7 @@ import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
+import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Newsletters from "./pages/Newsletters";
@@ -17,6 +18,16 @@ import SuperSubscribers from "./pages/SuperSubscribers";
 import Templates from "./pages/Templates";
 import NewCampaign from "./pages/NewCampaign";
 import NotFound from "./pages/not-found";
+import Login from "./pages/Login";
+
+// Auth context so Layout can access logout
+interface AuthContextValue {
+  logout: () => Promise<void>;
+}
+const AuthContext = createContext<AuthContextValue>({ logout: async () => {} });
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
 function AppRoutes() {
   return (
@@ -42,12 +53,56 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        setAuthState("authenticated");
+      } else {
+        setAuthState("unauthenticated");
+      }
+    } catch {
+      setAuthState("unauthenticated");
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthState("unauthenticated");
+    queryClient.clear();
+  }, []);
+
+  if (authState === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">Cargando...</div>
+      </div>
+    );
+  }
+
+  if (authState === "unauthenticated") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Login onLogin={() => setAuthState("authenticated")} />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <Router hook={useHashLocation}>
-        <AppRoutes />
-      </Router>
-      <Toaster />
+      <AuthContext.Provider value={{ logout }}>
+        <Router hook={useHashLocation}>
+          <AppRoutes />
+        </Router>
+        <Toaster />
+      </AuthContext.Provider>
     </QueryClientProvider>
   );
 }

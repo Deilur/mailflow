@@ -1,5 +1,9 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
+import session from "express-session";
+import createMemoryStore from "memorystore";
+import crypto from "crypto";
+import axios from "axios";
 import { storage } from "./storage";
 import {
   listLists, listCampaigns, updateCampaign, sendTestEmail,
@@ -10,6 +14,13 @@ import { insertNewsletterSettingsSchema, insertFunnelSchema, insertFunnelStepSch
 import { z } from "zod";
 import multer from "multer";
 import * as XLSX from "xlsx";
+
+// Extend express-session with our custom fields
+declare module "express-session" {
+  interface SessionData {
+    username?: string;
+  }
+}
 
 /**
  * Whether we can reach ListMonk.
@@ -84,11 +95,89 @@ function getDemoEmailStats() {
 // ── Route helpers ─────────────────────────────────────────────────────────────
 
 /** Wrap async route handler so errors go to Express error handler */
-function asyncRoute(fn: (...args: any[]) => Promise<void>) {
+function asyncRoute(fn: (...args: any[]) => Promise<any>) {
   return (req: any, res: any, next: any) => fn(req, res, next).catch(next);
 }
 
 export async function registerRoutes(httpServer: Server, app: Express) {
+
+  // ── SESSION SETUP ──────────────────────────────────────────────────────────
+
+  const MemoryStore = createMemoryStore(session);
+
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+      resave: false,
+      saveUninitialized: false,
+      store: new MemoryStore({ checkPeriod: 86_400_000 }),
+      cookie: {
+        httpOnly: true,
+        secure: false,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      },
+    })
+  );
+
+  // ── AUTH ENDPOINTS ─────────────────────────────────────────────────────────
+
+  app.post("/api/auth/login", asyncRoute(async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Usuario y contraseña requeridos" });
+    }
+
+    const listmonkUrl = process.env.LISTMONK_URL ?? "http://localhost:9000";
+    try {
+      await axios.get(`${listmonkUrl}/api/lists`, {
+        auth: { username, password },
+        timeout: 10_000,
+      });
+      // ListMonk accepted the credentials
+      req.session.username = username;
+      return res.json({ ok: true, username });
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        return res.status(401).json({ error: "Credenciales inválidas" });
+      }
+      // Network error or ListMonk unreachable
+      return res.status(502).json({ error: "No se pudo conectar con ListMonk" });
+    }
+  }));
+
+  app.get("/api/auth/me", (req: Request, res: Response) => {
+    if (req.session.username) {
+      return res.json({ username: req.session.username });
+    }
+    return res.status(401).json({ error: "No autenticado" });
+  });
+
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Error al cerrar sesión" });
+      }
+      res.clearCookie("connect.sid");
+      return res.json({ ok: true });
+    });
+  });
+
+  // ── AUTH MIDDLEWARE (protects all /api/* except /api/auth/login) ────────────
+
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    // Allow auth endpoints through
+    if (
+      req.path === "/auth/login" ||
+      req.path === "/auth/me" ||
+      req.path === "/auth/logout"
+    ) {
+      return next();
+    }
+    if (!req.session.username) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+    next();
+  });
 
   // ── LISTMONK PROXY ────────────────────────────────────────────────────────
 

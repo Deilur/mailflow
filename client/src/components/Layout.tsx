@@ -3,9 +3,10 @@ import { useHashLocation } from "wouter/use-hash-location";
 import { useState } from "react";
 import {
   LayoutDashboard, Mail, Megaphone, Workflow,
-  ChevronLeft, ChevronRight, Moon, Sun, Users, Star, FileCode
+  ChevronLeft, ChevronRight, Moon, Sun, Users, Star, FileCode, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/App";
 
 const NAV = [
   { href: "/",            label: "Dashboard",     icon: LayoutDashboard },
@@ -20,6 +21,7 @@ const NAV = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const { logout } = useAuth();
   const [dark, setDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches
   );
@@ -94,6 +96,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             title={dark ? "Modo claro" : "Modo oscuro"}
           >
             {dark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+          <button
+            onClick={logout}
+            className="p-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-destructive transition-colors"
+            title="Cerrar sesión"
+          >
+            <LogOut size={15} />
           </button>
           <button
             onClick={() => setCollapsed(c => !c)}
