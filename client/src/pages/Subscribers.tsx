@@ -48,6 +48,12 @@ function SubscriberModal({
   const [name, setName] = useState(sub?.name ?? "");
   const [email, setEmail] = useState(sub?.email ?? "");
   const [status, setStatus] = useState(sub?.status ?? "enabled");
+  const [subListIds, setSubListIds] = useState<number[]>(() =>
+    (sub?.lists ?? []).map((l: any) => l.id)
+  );
+
+  const allLists = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
+  const availableLists: any[] = allLists.data?.data ?? [];
 
   const updateMut = useMutation({
     mutationFn: (body: any) => apiRequest("PUT", `/api/subscribers/${sub.id}`, body),
@@ -61,7 +67,8 @@ function SubscriberModal({
 
   if (!sub) return null;
 
-  const lists: any[]         = sub.lists ?? [];
+  const lists: any[] = availableLists.filter((l: any) => subListIds.includes(l.id));
+  const listsToAdd: any[] = availableLists.filter((l: any) => !subListIds.includes(l.id));
   const subscriptions: any[] = sub.subscriptions ?? sub.lists ?? [];
   const bounces: any[]       = sub.bounces ?? [];
   const activity: any        = sub.activity ?? null;
@@ -129,9 +136,9 @@ function SubscriberModal({
           </TabsList>
 
           {/* LISTS TAB */}
-          <TabsContent value="lists" className="mt-3">
+          <TabsContent value="lists" className="mt-3 space-y-3">
             {lists.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Sin listas</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Sin newsletters</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {lists.map((l: any) => (
@@ -140,9 +147,29 @@ function SubscriberModal({
                     className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium"
                   >
                     {l.name}
+                    <button
+                      type="button"
+                      className="ml-0.5 hover:text-destructive transition-colors"
+                      onClick={() => setSubListIds(ids => ids.filter(id => id !== l.id))}
+                      title={`Quitar de ${l.name}`}
+                    >
+                      <XCircle size={12} />
+                    </button>
                   </span>
                 ))}
               </div>
+            )}
+            {listsToAdd.length > 0 && (
+              <Select onValueChange={(v) => setSubListIds(ids => [...ids, Number(v)])}>
+                <SelectTrigger className="h-8 text-xs w-[220px]">
+                  <SelectValue placeholder="Agregar a newsletter…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {listsToAdd.map((l: any) => (
+                    <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </TabsContent>
 
@@ -249,7 +276,7 @@ function SubscriberModal({
           <Button
             className="flex-1 h-9 text-sm"
             disabled={updateMut.isPending}
-            onClick={() => updateMut.mutate({ name, email, status })}
+            onClick={() => updateMut.mutate({ name, email, status, lists: subListIds })}
           >
             {updateMut.isPending ? "Guardando…" : "Guardar"}
           </Button>
