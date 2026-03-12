@@ -6,7 +6,6 @@ import {
   ChevronLeft, ChevronRight, Moon, Sun, Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import PerplexityAttribution from "./PerplexityAttribution";
 
 const NAV = [
   { href: "/",            label: "Dashboard",     icon: LayoutDashboard },
@@ -53,7 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <path d="M6 9h16M6 9l8 7 8-7M6 19h16V9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           {!collapsed && (
-            <span className="font-semibold text-sm text-foreground tracking-tight">MailFlow</span>
+            <span className="font-semibold text-sm text-foreground tracking-tight">Remoteland Mail</span>
           )}
         </div>
 
@@ -109,7 +108,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-6 max-w-[1200px] mx-auto">
           {children}
         </div>
-        <PerplexityAttribution />
       </main>
     </div>
   );
