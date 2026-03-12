@@ -142,6 +142,7 @@ export async function listSubscribersByList(listId: number, page = 1, perPage = 
 export async function sendTransactional(params: {
   subscriber_email: string;
   template_id: number;
+  from_email?: string;
   data?: Record<string, unknown>;
   headers?: Record<string, string>;
 }): Promise<void> {

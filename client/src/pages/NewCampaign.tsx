@@ -157,7 +157,7 @@ export default function NewCampaign() {
   const brandColor = ns?.brandColor ?? "#6366f1";
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="max-w-2xl mx-auto space-y-5">
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">

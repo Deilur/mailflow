@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -22,8 +24,10 @@ function KpiCard({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-muted-foreground mb-1">{label}</p>
-            <p className="text-xl font-semibold tabular-nums">{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl font-semibold tabular-nums">{value}</p>
+              {sub && <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">{sub}</span>}
+            </div>
           </div>
           <div className={`p-2 rounded-lg ${color}`}>
             <Icon size={16} className="text-white" />
@@ -35,8 +39,9 @@ function KpiCard({
 }
 
 export default function Dashboard() {
+  const [subsDays, setSubsDays] = useState(7);
   const kpis = useQuery<any>({ queryKey: ["/api/stats/kpis"] });
-  const dailySubs = useQuery<any>({ queryKey: ["/api/stats/daily-subscribers"] });
+  const dailySubs = useQuery<any>({ queryKey: ["/api/stats/daily-subscribers", subsDays], queryFn: () => fetch(`/api/stats/daily-subscribers?days=${subsDays}`).then(r => r.json()) });
   const emailStats = useQuery<any>({ queryKey: ["/api/stats/email-activity"] });
   const listsQuery = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
   const settingsQuery = useQuery<any>({ queryKey: ["/api/newsletter-settings"] });
@@ -112,7 +117,7 @@ export default function Dashboard() {
           Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
         ) : (
           <>
-            <KpiCard icon={Users} label="Suscriptores totales" value={k?.total_subscribers?.toLocaleString() ?? "-"} sub={k?.subscribers_last_7d != null ? `+${k.subscribers_last_7d} esta semana` : undefined} color="bg-blue-500" />
+            <KpiCard icon={Users} label="Suscriptores totales" value={k?.total_subscribers?.toLocaleString() ?? "-"} sub={k?.subscribers_last_7d != null ? `+${k.subscribers_last_7d} esta sem.` : undefined} color="bg-blue-500" />
             <KpiCard icon={Send} label="Emails enviados (30d)" value={k?.emails_sent_30d?.toLocaleString() ?? "-"} color="bg-violet-500" />
             <KpiCard icon={Eye} label="Open rate promedio" value={`${k?.avg_open_rate ?? "-"}%`} color="bg-emerald-500" />
             <KpiCard icon={MousePointerClick} label="Click rate promedio" value={`${k?.avg_click_rate ?? "-"}%`} color="bg-amber-500" />
@@ -123,8 +128,29 @@ export default function Dashboard() {
       {/* Suscriptores nuevos por lista */}
       <Card>
         <CardHeader className="pb-0">
-          <CardTitle className="text-sm font-semibold">Suscriptores nuevos diarios</CardTitle>
-          <p className="text-xs text-muted-foreground">Por newsletter — últimos 30 días</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-semibold">Suscriptores nuevos diarios</CardTitle>
+              <p className="text-xs text-muted-foreground">Por newsletter</p>
+            </div>
+            <div className="flex items-center gap-1">
+              {[
+                { label: "Hoy", days: 1 },
+                { label: "7d", days: 7 },
+                { label: "30d", days: 30 },
+              ].map(opt => (
+                <Button
+                  key={opt.days}
+                  variant={subsDays === opt.days ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs px-2.5"
+                  onClick={() => setSubsDays(opt.days)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="pt-4">
           {dailySubs.isLoading ? (

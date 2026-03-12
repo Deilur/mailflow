@@ -295,8 +295,10 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
   // ── STATS ─────────────────────────────────────────────────────────────────
 
-  // Daily subscriber counts per list (last 30 days)
-  app.get("/api/stats/daily-subscribers", asyncRoute(async (_req, res) => {
+  // Daily subscriber counts per list
+  app.get("/api/stats/daily-subscribers", asyncRoute(async (req, res) => {
+    const days = Math.min(Number(req.query.days ?? 7), 90) || 7;
+
     if (!LISTMONK_ENABLED) {
       return res.json({ data: getDemoDailyStats() });
     }
@@ -304,11 +306,10 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     // Fetch subscriber data for all lists in parallel
     const lists = await listLists();
     const results = await Promise.all(
-      lists.map(l => getDailySubscriberStats(l.id, 30))
+      lists.map(l => getDailySubscriberStats(l.id, days))
     );
 
     // Merge into [{date, list_1: N, list_2: N, ...}]
-    const days = 30;
     const merged: Record<string, Record<string, unknown>> = {};
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000).toISOString().split("T")[0];
@@ -577,6 +578,52 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.status(201).json({ data: r.data?.data });
   }));
 
+  // Bulk delete subscribers
+  app.post("/api/subscribers/bulk-delete", asyncRoute(async (req, res) => {
+    const ids: number[] = req.body.ids;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "Se requiere un array de ids" });
+    }
+
+    if (!LISTMONK_ENABLED) {
+      return res.json({ ok: true, deleted: ids.length });
+    }
+
+    const lm = getListmonkClient();
+    const errors: { id: number; error: string }[] = [];
+    for (const id of ids) {
+      try {
+        await lm.delete(`/api/subscribers/${id}`);
+      } catch (err: any) {
+        errors.push({ id, error: err.message ?? "Error desconocido" });
+      }
+    }
+
+    res.json({ ok: true, deleted: ids.length - errors.length, errors });
+  }));
+
+  // Bulk add subscribers to a list
+  app.post("/api/subscribers/bulk-add-list", asyncRoute(async (req, res) => {
+    const { ids, list_id } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0 || !list_id) {
+      return res.status(400).json({ error: "Se requiere ids (array) y list_id" });
+    }
+
+    if (!LISTMONK_ENABLED) {
+      return res.json({ ok: true, added: ids.length });
+    }
+
+    const lm = getListmonkClient();
+    await lm.put("/api/subscribers/lists", {
+      ids: ids.map(Number),
+      action: "add",
+      target_list_ids: [Number(list_id)],
+      status: "confirmed",
+    });
+
+    res.json({ ok: true, added: ids.length });
+  }));
+
   // Import subscribers from CSV/Excel
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
   app.post("/api/subscribers/import", upload.single("file"), asyncRoute(async (req: any, res) => {
@@ -668,57 +715,94 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
   // ── SUPER SUBSCRIBERS ────────────────────────────────────────────────────
 
-  app.get("/api/stats/super-subscribers", asyncRoute(async (req, res) => {
-    const listIds = (req.query.lists as string ?? "").split(",").map(Number).filter(Boolean);
-
-    if (!LISTMONK_ENABLED || listIds.length < 2) {
-      return res.json({ data: { subscribers: [], counts: [] } });
+  app.get("/api/stats/super-subscribers", asyncRoute(async (_req, res) => {
+    if (!LISTMONK_ENABLED) {
+      // Demo data
+      return res.json({ data: {
+        total_unique_subscribers: 8450,
+        breakdown: [
+          { list_count: 1, subscriber_count: 6200 },
+          { list_count: 2, subscriber_count: 1500 },
+          { list_count: 3, subscriber_count: 600 },
+          { list_count: 4, subscriber_count: 150 },
+        ],
+        top_combinations: [
+          { list_ids: [1, 2], list_names: ["Tech Weekly", "Growth Digest"], subscriber_count: 820 },
+          { list_ids: [1, 3], list_names: ["Tech Weekly", "Design Pulse"], subscriber_count: 410 },
+          { list_ids: [2, 3], list_names: ["Growth Digest", "Design Pulse"], subscriber_count: 305 },
+          { list_ids: [1, 2, 3], list_names: ["Tech Weekly", "Growth Digest", "Design Pulse"], subscriber_count: 198 },
+          { list_ids: [1, 4], list_names: ["Tech Weekly", "Founders Brief"], subscriber_count: 145 },
+          { list_ids: [3, 4], list_names: ["Design Pulse", "Founders Brief"], subscriber_count: 92 },
+          { list_ids: [2, 4], list_names: ["Growth Digest", "Founders Brief"], subscriber_count: 78 },
+          { list_ids: [1, 2, 3, 4], list_names: ["Tech Weekly", "Growth Digest", "Design Pulse", "Founders Brief"], subscriber_count: 42 },
+        ],
+      }});
     }
 
-    // Query ListMonk's DB directly for subscribers in multiple selected lists
     const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) return res.json({ data: { subscribers: [], counts: [] } });
+    if (!dbUrl) {
+      return res.json({ data: { total_unique_subscribers: 0, breakdown: [], top_combinations: [] } });
+    }
 
     const { Pool } = require("pg");
     const pool = new Pool({ connectionString: dbUrl });
 
     try {
-      // Get subscribers that are in 2+ of the selected lists
-      const result = await pool.query(`
-        SELECT s.id, s.email, s.name, s.status,
-               array_agg(sl.list_id ORDER BY sl.list_id) AS list_ids,
-               COUNT(DISTINCT sl.list_id)::int AS list_count
-        FROM public.subscribers s
-        JOIN public.subscriber_lists sl ON s.id = sl.subscriber_id
-        WHERE sl.list_id = ANY($1)
-          AND sl.status != 'unsubscribed'
-        GROUP BY s.id, s.email, s.name, s.status
-        HAVING COUNT(DISTINCT sl.list_id) >= 2
-        ORDER BY COUNT(DISTINCT sl.list_id) DESC, s.email ASC
-        LIMIT 500
-      `, [listIds]);
+      // 1) Total unique subscribers across all lists
+      const totalResult = await pool.query(`
+        SELECT COUNT(DISTINCT subscriber_id)::int AS total
+        FROM public.subscriber_lists
+        WHERE status != 'unsubscribed'
+      `);
+      const total_unique_subscribers: number = totalResult.rows[0]?.total ?? 0;
 
-      // Get count breakdown: how many subs share exactly 2, 3, 4... lists
-      const countResult = await pool.query(`
-        SELECT shared_count, COUNT(*)::int AS subscriber_count
+      // 2) Breakdown: how many subscribers are in exactly 1, 2, 3... lists
+      const breakdownResult = await pool.query(`
+        SELECT list_count, COUNT(*)::int AS subscriber_count
         FROM (
-          SELECT s.id, COUNT(DISTINCT sl.list_id)::int AS shared_count
-          FROM public.subscribers s
-          JOIN public.subscriber_lists sl ON s.id = sl.subscriber_id
-          WHERE sl.list_id = ANY($1)
-            AND sl.status != 'unsubscribed'
-          GROUP BY s.id
-          HAVING COUNT(DISTINCT sl.list_id) >= 2
+          SELECT subscriber_id, COUNT(DISTINCT list_id)::int AS list_count
+          FROM public.subscriber_lists
+          WHERE status != 'unsubscribed'
+          GROUP BY subscriber_id
         ) sub
-        GROUP BY shared_count
-        ORDER BY shared_count DESC
-      `, [listIds]);
+        GROUP BY list_count
+        ORDER BY list_count ASC
+      `);
+
+      // 3) Top list combinations (for subscribers in 2+ lists)
+      const combosResult = await pool.query(`
+        SELECT list_ids, COUNT(*)::int AS subscriber_count
+        FROM (
+          SELECT subscriber_id,
+                 array_agg(list_id ORDER BY list_id) AS list_ids
+          FROM public.subscriber_lists
+          WHERE status != 'unsubscribed'
+          GROUP BY subscriber_id
+          HAVING COUNT(DISTINCT list_id) >= 2
+        ) sub
+        GROUP BY list_ids
+        ORDER BY subscriber_count DESC
+        LIMIT 15
+      `);
+
+      // Resolve list names for the combinations
+      const listNameResult = await pool.query(`SELECT id, name FROM public.lists`);
+      const listNameMap: Record<number, string> = {};
+      for (const row of listNameResult.rows) {
+        listNameMap[row.id] = row.name;
+      }
+
+      const top_combinations = combosResult.rows.map((row: any) => ({
+        list_ids: row.list_ids,
+        list_names: (row.list_ids as number[]).map(id => listNameMap[id] ?? `Lista ${id}`),
+        subscriber_count: row.subscriber_count,
+      }));
 
       res.json({
         data: {
-          subscribers: result.rows,
-          counts: countResult.rows,
-          total: countResult.rows.reduce((a: number, r: any) => a + r.subscriber_count, 0),
+          total_unique_subscribers,
+          breakdown: breakdownResult.rows,
+          top_combinations,
         }
       });
     } finally {

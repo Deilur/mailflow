@@ -59,7 +59,7 @@ export default function CampaignEditor() {
 
   if (campaigns.isLoading || settings.isLoading) {
     return (
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-4 max-w-2xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-96" />
       </div>
@@ -69,7 +69,7 @@ export default function CampaignEditor() {
   const color = ns?.brandColor ?? "#6366f1";
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl mx-auto">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => nav("/campaigns")} className="gap-1">
           <ArrowLeft size={14} /> Campañas

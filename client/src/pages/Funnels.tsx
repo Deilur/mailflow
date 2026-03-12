@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Plus, Play, Pause, Trash2, ChevronRight, Users, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Plus, Play, Pause, Trash2, Users, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,7 @@ const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
 };
 
 export default function Funnels() {
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const funnels = useQuery<any>({ queryKey: ["/api/funnels"] });
   const settings = useQuery<any>({ queryKey: ["/api/newsletter-settings"] });
@@ -76,7 +77,11 @@ export default function Funnels() {
                 const color = ns?.brandColor ?? "#6366f1";
 
                 return (
-                  <div key={f.id} className="rounded-xl border border-border bg-card p-4 group">
+                  <div
+                    key={f.id}
+                    className="rounded-xl border border-border bg-card p-4 group cursor-pointer hover:border-primary/30 transition-colors"
+                    onClick={() => navigate(`/funnels/${f.id}`)}
+                  >
                     <div className="flex items-start gap-3">
                       {/* Color strip */}
                       <div
@@ -130,25 +135,24 @@ export default function Funnels() {
                           size="icon"
                           className="h-8 w-8"
                           title={f.status === "active" ? "Pausar" : "Activar"}
-                          onClick={() => toggleStatus.mutate({
-                            id: f.id,
-                            status: f.status === "active" ? "paused" : "active",
-                          })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStatus.mutate({
+                              id: f.id,
+                              status: f.status === "active" ? "paused" : "active",
+                            });
+                          }}
                           data-testid={`button-toggle-funnel-${f.id}`}
                         >
                           {f.status === "active" ? <Pause size={14} /> : <Play size={14} />}
                         </Button>
-                        <Link href={`/funnels/${f.id}`}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalle">
-                            <ChevronRight size={14} />
-                          </Button>
-                        </Link>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Eliminar"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (confirm(`¿Eliminar el funnel "${f.name}"? Esta acción no se puede deshacer.`)) {
                               deleteFunnel.mutate(f.id);
                             }

@@ -263,9 +263,20 @@ async function executeStep(enrollment: any, step: any): Promise<{ outcome: strin
 
 async function executeSendEmail(enrollment: any, config: any): Promise<{ outcome: string; details: any }> {
   try {
+    // Look up the from_email from newsletter settings for this funnel's list
+    let from_email: string | undefined;
+    const funnel = await storage.getFunnelById(enrollment.funnelId);
+    if (funnel?.listmonkListId) {
+      const settings = await storage.getNewsletterSettingsByListId(funnel.listmonkListId);
+      if (settings?.fromEmail) {
+        from_email = settings.fromEmail;
+      }
+    }
+
     await sendTransactional({
       subscriber_email: enrollment.subscriberEmail,
       template_id: config.template_id,
+      from_email,
       data: config.data ?? {},
     });
     log(`Sent email to ${enrollment.subscriberEmail} (template: ${config.template_id})`, "funnel-worker");

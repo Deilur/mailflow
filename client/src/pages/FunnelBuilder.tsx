@@ -346,7 +346,7 @@ export default function FunnelBuilder() {
   const settingsMap = Object.fromEntries(settingsData.map(s => [s.listmonkListId, s]));
 
   return (
-    <div className="space-y-5 max-w-xl">
+    <div className="space-y-5 max-w-xl mx-auto">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => nav("/funnels")} className="gap-1">
           <ArrowLeft size={14} /> Funnels

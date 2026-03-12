@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Search, UserPlus, CheckCircle2, XCircle, AlertTriangle,
   Mail, BarChart2, List, RefreshCw, ChevronLeft, ChevronRight,
-  Upload, Save, FileSpreadsheet, Trash2,
+  Upload, Save, FileSpreadsheet, Trash2, ListPlus, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -130,13 +134,10 @@ function SubscriberModal({
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="lists" className="mt-3">
+        <Tabs defaultValue="subscriptions" className="mt-3">
           <TabsList className="h-8 text-xs">
-            <TabsTrigger value="lists" className="text-xs gap-1">
-              <List size={12} /> Listas ({lists.length})
-            </TabsTrigger>
             <TabsTrigger value="subscriptions" className="text-xs gap-1">
-              <Mail size={12} /> Suscripciones ({subscriptions.length})
+              <Mail size={12} /> Suscripciones ({lists.length})
             </TabsTrigger>
             <TabsTrigger value="bounces" className="text-xs gap-1">
               <AlertTriangle size={12} /> Bounces ({bounces.length})
@@ -146,28 +147,51 @@ function SubscriberModal({
             </TabsTrigger>
           </TabsList>
 
-          {/* LISTS TAB */}
-          <TabsContent value="lists" className="mt-3 space-y-3">
+          {/* SUBSCRIPTIONS TAB (merged lists + subscriptions) */}
+          <TabsContent value="subscriptions" className="mt-3 space-y-3">
             {lists.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Sin newsletters</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Sin suscripciones</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {lists.map((l: any) => (
-                  <span
-                    key={l.id}
-                    className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium"
-                  >
-                    {l.name}
-                    <button
-                      type="button"
-                      className="ml-0.5 hover:text-destructive transition-colors"
-                      onClick={() => setSubListIds(ids => ids.filter(id => id !== l.id))}
-                      title={`Quitar de ${l.name}`}
-                    >
-                      <XCircle size={12} />
-                    </button>
-                  </span>
-                ))}
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Newsletter</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Estado</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Fecha</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lists.map((l: any) => {
+                      const subInfo = subscriptions.find((s: any) => s.id === l.id);
+                      const sm = subInfo ? (SUB_STATUS[subInfo.subscription_status] ?? SUB_STATUS.confirmed) : SUB_STATUS.confirmed;
+                      return (
+                        <tr key={l.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                          <td className="px-3 py-2.5 font-medium text-primary">{l.name}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-medium", sm.class)}>
+                              {sm.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-muted-foreground">
+                            {subInfo ? fmtDate(subInfo.subscription_created_at) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              onClick={() => setSubListIds(ids => ids.filter(id => id !== l.id))}
+                              title={`Quitar de ${l.name}`}
+                            >
+                              <XCircle size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
             {listsToAdd.length > 0 && (
@@ -181,46 +205,6 @@ function SubscriberModal({
                   ))}
                 </SelectContent>
               </Select>
-            )}
-          </TabsContent>
-
-          {/* SUBSCRIPTIONS TAB */}
-          <TabsContent value="subscriptions" className="mt-3">
-            {subscriptions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Sin suscripciones</p>
-            ) : (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/40 border-b border-border">
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Lista</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Estado</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Creado</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Actualizado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subscriptions.map((s: any, i: number) => {
-                      const sm = SUB_STATUS[s.subscription_status] ?? SUB_STATUS.confirmed;
-                      return (
-                        <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
-                          <td className="px-3 py-2.5 font-medium text-primary">{s.name}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-medium", sm.class)}>
-                              {sm.label}
-                            </span>
-                            {s.subscription_type && (
-                              <span className="ml-1.5 text-muted-foreground">{s.subscription_type === "single" ? "Single opt-in" : s.subscription_type}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 text-muted-foreground">{fmtDate(s.subscription_created_at)}</td>
-                          <td className="px-3 py-2.5 text-muted-foreground">{fmtDate(s.subscription_updated_at)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
             )}
           </TabsContent>
 
@@ -565,8 +549,14 @@ export default function Subscribers() {
   const [selected, setSelected] = useState<any>(null);
   const [newSubOpen, setNewSubOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const perPage = 25;
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Clear selection when page/search/filter changes
+  useEffect(() => {
+    setCheckedIds(new Set());
+  }, [page, search, listFilter]);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -596,6 +586,47 @@ export default function Subscribers() {
   const subs: any[]  = query.data?.data?.results ?? [];
   const total: number = query.data?.data?.total ?? 0;
   const totalPages = Math.ceil(total / perPage);
+
+  const availableLists: any[] = lists.data?.data ?? [];
+  const hasChecked = checkedIds.size > 0;
+  const allOnPageChecked = subs.length > 0 && subs.every((s: any) => checkedIds.has(s.id));
+
+  const toggleOne = (id: number) => {
+    setCheckedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allOnPageChecked) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(subs.map((s: any) => s.id)));
+    }
+  };
+
+  const bulkDeleteMut = useMutation({
+    mutationFn: (ids: number[]) => apiRequest("POST", "/api/subscribers/bulk-delete", { ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      toast({ title: `${checkedIds.size} suscriptor(es) eliminado(s)` });
+      setCheckedIds(new Set());
+    },
+    onError: () => toast({ title: "Error al eliminar suscriptores", variant: "destructive" }),
+  });
+
+  const bulkAddListMut = useMutation({
+    mutationFn: (body: { ids: number[]; list_id: number }) =>
+      apiRequest("POST", "/api/subscribers/bulk-add-list", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      toast({ title: `${checkedIds.size} suscriptor(es) agregado(s) a la newsletter` });
+      setCheckedIds(new Set());
+    },
+    onError: () => toast({ title: "Error al agregar a newsletter", variant: "destructive" }),
+  });
 
   return (
     <div className="space-y-5">
@@ -649,11 +680,70 @@ export default function Subscribers() {
         </Select>
       </div>
 
+      {/* Bulk action toolbar */}
+      {hasChecked && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+          <span className="text-sm font-medium">{checkedIds.size} seleccionados</span>
+          <div className="flex-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 text-sm">
+                <ListPlus size={14} /> Agregar a newsletter
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {availableLists.length === 0 ? (
+                <DropdownMenuItem disabled>Sin newsletters disponibles</DropdownMenuItem>
+              ) : (
+                availableLists.map((l: any) => (
+                  <DropdownMenuItem
+                    key={l.id}
+                    onClick={() => bulkAddListMut.mutate({ ids: Array.from(checkedIds), list_id: l.id })}
+                  >
+                    {l.name}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5 h-8 text-sm"
+            disabled={bulkDeleteMut.isPending}
+            onClick={() => {
+              if (confirm(`¿Eliminar ${checkedIds.size} suscriptor(es)? Esta acción no se puede deshacer.`)) {
+                bulkDeleteMut.mutate(Array.from(checkedIds));
+              }
+            }}
+          >
+            <Trash2 size={13} />
+            {bulkDeleteMut.isPending ? "Eliminando…" : "Eliminar"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setCheckedIds(new Set())}
+            title="Deseleccionar todo"
+          >
+            <X size={14} />
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-lg border border-border overflow-hidden bg-card">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
+              <th className="w-10 px-3 py-2.5">
+                <Checkbox
+                  checked={allOnPageChecked && subs.length > 0}
+                  onCheckedChange={toggleAll}
+                  aria-label="Seleccionar todos en la página"
+                />
+              </th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Nombre / Email</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Listas</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Estado</th>
@@ -664,6 +754,7 @@ export default function Subscribers() {
             {query.isLoading
               ? Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b border-border">
+                  <td className="px-3 py-3"><Skeleton className="h-4 w-4" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-4 w-48" /></td>
                   <td className="px-4 py-3 hidden md:table-cell"><Skeleton className="h-4 w-24" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
@@ -673,7 +764,7 @@ export default function Subscribers() {
               : subs.length === 0
                 ? (
                   <tr>
-                    <td colSpan={4} className="text-center py-12 text-muted-foreground text-sm">
+                    <td colSpan={5} className="text-center py-12 text-muted-foreground text-sm">
                       {search ? "No se encontraron suscriptores" : "Sin suscriptores aún"}
                     </td>
                   </tr>
@@ -682,13 +773,24 @@ export default function Subscribers() {
                   const sm = STATUS_META[s.status] ?? STATUS_META.enabled;
                   const StatusIcon = sm.icon;
                   const subLists: any[] = s.lists ?? [];
+                  const isChecked = checkedIds.has(s.id);
                   return (
                     <tr
                       key={s.id}
-                      className="border-b border-border last:border-0 hover:bg-accent/30 cursor-pointer transition-colors"
+                      className={cn(
+                        "border-b border-border last:border-0 hover:bg-accent/30 cursor-pointer transition-colors",
+                        isChecked && "bg-primary/5"
+                      )}
                       onClick={() => setSelected(s)}
                       data-testid={`row-subscriber-${s.id}`}
                     >
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={() => toggleOne(s.id)}
+                          aria-label={`Seleccionar ${s.name || s.email}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-sm truncate max-w-[220px]">{s.name || "—"}</p>
                         <p className="text-xs text-muted-foreground truncate max-w-[220px]">{s.email}</p>
