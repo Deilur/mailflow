@@ -127,8 +127,8 @@ export async function sendTestEmail(id: number, emails: string[]): Promise<void>
 
 export async function listTemplates(): Promise<ListmonkTemplate[]> {
   const lm = getListmonkClient();
-  const res = await lm.get<{ data: { results: ListmonkTemplate[] } }>("/api/templates");
-  return res.data.data.results ?? [];
+  const res = await lm.get<{ data: ListmonkTemplate[] }>("/api/templates");
+  return res.data.data ?? [];
 }
 
 export async function listSubscribersByList(listId: number, page = 1, perPage = 100): Promise<{ results: ListmonkSubscriber[]; total: number }> {
