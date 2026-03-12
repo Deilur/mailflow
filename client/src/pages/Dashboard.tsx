@@ -9,18 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
-const LIST_COLORS: Record<string, string> = {
-  list_1: "#3b82f6",
-  list_2: "#10b981",
-  list_3: "#8b5cf6",
-  list_4: "#f59e0b",
-};
-const LIST_NAMES: Record<string, string> = {
-  list_1: "Tech Weekly",
-  list_2: "Growth Digest",
-  list_3: "Design Pulse",
-  list_4: "Founders Brief",
-};
+const PALETTE = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
 
 function KpiCard({
   icon: Icon, label, value, sub, color
@@ -55,7 +44,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       {payload.map((p: any) => (
         <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-          <span className="text-muted-foreground">{LIST_NAMES[p.dataKey] ?? p.dataKey}:</span>
+          <span className="text-muted-foreground">{listNames[p.dataKey] ?? p.dataKey}:</span>
           <span className="font-medium">{p.value}</span>
         </div>
       ))}
@@ -85,8 +74,20 @@ export default function Dashboard() {
   const kpis = useQuery<any>({ queryKey: ["/api/stats/kpis"] });
   const dailySubs = useQuery<any>({ queryKey: ["/api/stats/daily-subscribers"] });
   const emailStats = useQuery<any>({ queryKey: ["/api/stats/email-activity"] });
+  const listsQuery = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
 
   const k = kpis.data?.data;
+  const lists: { id: number; name: string }[] = listsQuery.data?.data ?? [];
+
+  // Build dynamic name/color maps from real list data
+  const listNames: Record<string, string> = {};
+  const listColors: Record<string, string> = {};
+  lists.forEach((l, i) => {
+    const key = `list_${l.id}`;
+    listNames[key] = l.name;
+    listColors[key] = PALETTE[i % PALETTE.length];
+  });
+
   const subsData = (dailySubs.data?.data ?? []).map((d: any) => ({
     ...d,
     date: d.date,
@@ -108,7 +109,7 @@ export default function Dashboard() {
           Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
         ) : (
           <>
-            <KpiCard icon={Users} label="Suscriptores totales" value={k?.total_subscribers?.toLocaleString() ?? "-"} sub={`+${k?.subscribers_last_7d} esta semana`} color="bg-blue-500" />
+            <KpiCard icon={Users} label="Suscriptores totales" value={k?.total_subscribers?.toLocaleString() ?? "-"} sub={k?.subscribers_last_7d != null ? `+${k.subscribers_last_7d} esta semana` : undefined} color="bg-blue-500" />
             <KpiCard icon={Send} label="Emails enviados (30d)" value={k?.emails_sent_30d?.toLocaleString() ?? "-"} color="bg-violet-500" />
             <KpiCard icon={Eye} label="Open rate promedio" value={`${k?.avg_open_rate ?? "-"}%`} color="bg-emerald-500" />
             <KpiCard icon={MousePointerClick} label="Click rate promedio" value={`${k?.avg_click_rate ?? "-"}%`} color="bg-amber-500" />
@@ -129,7 +130,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={subsData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
-                  {Object.entries(LIST_COLORS).map(([key, color]) => (
+                  {Object.entries(listColors).map(([key, color]) => (
                     <linearGradient key={key} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={color} stopOpacity={0.18} />
                       <stop offset="95%" stopColor={color} stopOpacity={0} />
@@ -141,12 +142,12 @@ export default function Dashboard() {
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend
-                  formatter={(value) => LIST_NAMES[value] ?? value}
+                  formatter={(value) => listNames[value] ?? value}
                   iconType="circle"
                   iconSize={7}
                   wrapperStyle={{ fontSize: 11 }}
                 />
-                {Object.entries(LIST_COLORS).map(([key, color]) => (
+                {Object.entries(listColors).map(([key, color]) => (
                   <Area
                     key={key}
                     type="monotone"
