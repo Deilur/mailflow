@@ -23,7 +23,18 @@ function TemplateEditor({
   const isEdit = !!template;
 
   const [name, setName] = useState(template?.name ?? "");
-  const [body, setBody] = useState(template?.body ?? '<p>Escribe tu template aquí...</p>');
+  const defaultBody = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  {{ template "content" . }}
+</body>
+</html>`;
+  const [body, setBody] = useState(template?.body ?? defaultBody);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const saveMut = useMutation({
