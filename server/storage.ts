@@ -40,9 +40,15 @@ export interface IStorage {
   // Enrollments
   getEnrollmentsByFunnelId(funnelId: string): Promise<FunnelEnrollment[]>;
   getEnrollmentStats(funnelId: string): Promise<{ active: number; waiting: number; completed: number; errored: number }>;
+  getEnrollmentByFunnelAndSubscriber(funnelId: string, subscriberUuid: string): Promise<FunnelEnrollment | undefined>;
+  createEnrollment(data: { funnelId: string; subscriberUuid: string; subscriberEmail: string; nextRunAt?: Date | null }): Promise<FunnelEnrollment>;
+  getReadyEnrollments(limit?: number): Promise<FunnelEnrollment[]>;
+  updateEnrollment(id: string, data: { currentStepPos?: number; status?: string; nextRunAt?: Date | null; completedAt?: Date | null }): Promise<void>;
+  getActiveFunnelsByListId(listId: number): Promise<Funnel[]>;
 
   // Logs
   getLogsByFunnelId(funnelId: string, limit?: number): Promise<ExecutionLog[]>;
+  createExecutionLog(data: { enrollmentId: string; funnelId: string; stepPosition: number; stepType: string; outcome: string; details?: any }): Promise<void>;
 }
 
 // ── PostgreSQL Implementation ─────────────────────────────────────────────────
@@ -250,6 +256,69 @@ export class PgStorage implements IStorage {
     `, [funnelId]);
   }
 
+  async getEnrollmentByFunnelAndSubscriber(funnelId: string, subscriberUuid: string): Promise<FunnelEnrollment | undefined> {
+    const rows = await this.query<FunnelEnrollment>(`
+      SELECT id, funnel_id AS "funnelId",
+             subscriber_uuid AS "subscriberUuid", subscriber_email AS "subscriberEmail",
+             current_step_pos AS "currentStepPos", status,
+             next_run_at AS "nextRunAt", enrolled_at AS "enrolledAt", completed_at AS "completedAt"
+      FROM funnel_enrollments
+      WHERE funnel_id = $1 AND subscriber_uuid = $2
+    `, [funnelId, subscriberUuid]);
+    return rows[0];
+  }
+
+  async createEnrollment(data: { funnelId: string; subscriberUuid: string; subscriberEmail: string; nextRunAt?: Date | null }): Promise<FunnelEnrollment> {
+    const id = randomUUID();
+    const rows = await this.query<FunnelEnrollment>(`
+      INSERT INTO funnel_enrollments (id, funnel_id, subscriber_uuid, subscriber_email, current_step_pos, status, next_run_at)
+      VALUES ($1, $2, $3, $4, 0, 'active', $5)
+      ON CONFLICT (funnel_id, subscriber_uuid) DO NOTHING
+      RETURNING id, funnel_id AS "funnelId",
+                subscriber_uuid AS "subscriberUuid", subscriber_email AS "subscriberEmail",
+                current_step_pos AS "currentStepPos", status,
+                next_run_at AS "nextRunAt", enrolled_at AS "enrolledAt", completed_at AS "completedAt"
+    `, [id, data.funnelId, data.subscriberUuid, data.subscriberEmail, data.nextRunAt ?? new Date()]);
+    return rows[0];
+  }
+
+  async getReadyEnrollments(limit = 50): Promise<FunnelEnrollment[]> {
+    return this.query<FunnelEnrollment>(`
+      SELECT id, funnel_id AS "funnelId",
+             subscriber_uuid AS "subscriberUuid", subscriber_email AS "subscriberEmail",
+             current_step_pos AS "currentStepPos", status,
+             next_run_at AS "nextRunAt", enrolled_at AS "enrolledAt", completed_at AS "completedAt"
+      FROM funnel_enrollments
+      WHERE status IN ('active', 'waiting')
+        AND next_run_at <= NOW()
+      ORDER BY next_run_at ASC
+      LIMIT $1
+    `, [limit]);
+  }
+
+  async updateEnrollment(id: string, data: { currentStepPos?: number; status?: string; nextRunAt?: Date | null; completedAt?: Date | null }): Promise<void> {
+    const fields: string[] = [];
+    const vals: unknown[] = [];
+    let i = 1;
+    if (data.currentStepPos !== undefined) { fields.push(`current_step_pos = $${i++}`); vals.push(data.currentStepPos); }
+    if (data.status !== undefined)         { fields.push(`status = $${i++}`);           vals.push(data.status); }
+    if (data.nextRunAt !== undefined)       { fields.push(`next_run_at = $${i++}`);      vals.push(data.nextRunAt); }
+    if (data.completedAt !== undefined)     { fields.push(`completed_at = $${i++}`);     vals.push(data.completedAt); }
+    if (fields.length === 0) return;
+    vals.push(id);
+    await this.query(`UPDATE funnel_enrollments SET ${fields.join(", ")} WHERE id = $${i}`, vals);
+  }
+
+  async getActiveFunnelsByListId(listId: number): Promise<Funnel[]> {
+    return this.query<Funnel>(`
+      SELECT id, name, description, listmonk_list_id AS "listmonkListId",
+             status, entry_policy AS "entryPolicy",
+             created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM funnels
+      WHERE listmonk_list_id = $1 AND status = 'active'
+    `, [listId]);
+  }
+
   async getEnrollmentStats(funnelId: string): Promise<{ active: number; waiting: number; completed: number; errored: number }> {
     const rows = await this.query<{ status: string; count: string }>(`
       SELECT status, COUNT(*)::int AS count
@@ -279,6 +348,14 @@ export class PgStorage implements IStorage {
       ORDER BY executed_at DESC
       LIMIT $2
     `, [funnelId, limit]);
+  }
+
+  async createExecutionLog(data: { enrollmentId: string; funnelId: string; stepPosition: number; stepType: string; outcome: string; details?: any }): Promise<void> {
+    const id = randomUUID();
+    await this.query(`
+      INSERT INTO funnel_execution_logs (id, enrollment_id, funnel_id, step_position, step_type, outcome, details)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [id, data.enrollmentId, data.funnelId, data.stepPosition, data.stepType, data.outcome, JSON.stringify(data.details ?? {})]);
   }
 }
 
@@ -399,8 +476,35 @@ export class MemStorage implements IStorage {
     const all = await this.getEnrollmentsByFunnelId(funnelId);
     return { active: all.filter(e => e.status === "active").length, waiting: all.filter(e => e.status === "waiting").length, completed: all.filter(e => e.status === "completed").length, errored: all.filter(e => e.status === "errored").length };
   }
+  async getEnrollmentByFunnelAndSubscriber(funnelId: string, subscriberUuid: string): Promise<FunnelEnrollment | undefined> {
+    return Array.from(this.enrollments.values()).find(e => e.funnelId === funnelId && e.subscriberUuid === subscriberUuid);
+  }
+  async createEnrollment(data: { funnelId: string; subscriberUuid: string; subscriberEmail: string; nextRunAt?: Date | null }): Promise<FunnelEnrollment> {
+    const e: FunnelEnrollment = { id: randomUUID(), funnelId: data.funnelId, subscriberUuid: data.subscriberUuid, subscriberEmail: data.subscriberEmail, currentStepPos: 0, status: "active", nextRunAt: data.nextRunAt ?? new Date(), enrolledAt: new Date(), completedAt: null };
+    this.enrollments.set(e.id, e);
+    return e;
+  }
+  async getReadyEnrollments(limit = 50): Promise<FunnelEnrollment[]> {
+    const now = Date.now();
+    return Array.from(this.enrollments.values()).filter(e => (e.status === "active" || e.status === "waiting") && e.nextRunAt && e.nextRunAt.getTime() <= now).sort((a, b) => (a.nextRunAt?.getTime() ?? 0) - (b.nextRunAt?.getTime() ?? 0)).slice(0, limit);
+  }
+  async updateEnrollment(id: string, data: { currentStepPos?: number; status?: string; nextRunAt?: Date | null; completedAt?: Date | null }): Promise<void> {
+    const e = this.enrollments.get(id);
+    if (!e) return;
+    if (data.currentStepPos !== undefined) e.currentStepPos = data.currentStepPos;
+    if (data.status !== undefined) e.status = data.status;
+    if (data.nextRunAt !== undefined) e.nextRunAt = data.nextRunAt;
+    if (data.completedAt !== undefined) e.completedAt = data.completedAt;
+  }
+  async getActiveFunnelsByListId(listId: number): Promise<Funnel[]> {
+    return Array.from(this.funnels.values()).filter(f => f.listmonkListId === listId && f.status === "active");
+  }
   async getLogsByFunnelId(funnelId: string, limit = 50): Promise<ExecutionLog[]> {
     return Array.from(this.logs.values()).filter(l => l.funnelId === funnelId).sort((a, b) => (b.executedAt?.getTime() ?? 0) - (a.executedAt?.getTime() ?? 0)).slice(0, limit);
+  }
+  async createExecutionLog(data: { enrollmentId: string; funnelId: string; stepPosition: number; stepType: string; outcome: string; details?: any }): Promise<void> {
+    const l: ExecutionLog = { id: randomUUID(), enrollmentId: data.enrollmentId, funnelId: data.funnelId, stepPosition: data.stepPosition, stepType: data.stepType, outcome: data.outcome, details: data.details ?? {}, executedAt: new Date() };
+    this.logs.set(l.id, l);
   }
 }
 
