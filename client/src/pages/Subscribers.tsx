@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Search, UserPlus, CheckCircle2, XCircle, AlertTriangle,
   Mail, BarChart2, List, RefreshCw, ChevronLeft, ChevronRight,
-  Upload, Save, FileSpreadsheet,
+  Upload, Save, FileSpreadsheet, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,16 @@ function SubscriberModal({
       onClose();
     },
     onError: () => toast({ title: "Error al guardar", variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/subscribers/${sub.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      toast({ title: "Suscriptor eliminado" });
+      onClose();
+    },
+    onError: () => toast({ title: "Error al eliminar", variant: "destructive" }),
   });
 
   if (!sub) return null;
@@ -273,9 +283,23 @@ function SubscriberModal({
 
         {/* Footer */}
         <div className="flex gap-2 mt-4 pt-3 border-t border-border">
-          <Button variant="outline" className="flex-1 h-9 text-sm" onClick={onClose}>Cerrar</Button>
           <Button
-            className="flex-1 h-9 text-sm"
+            variant="destructive"
+            className="h-9 text-sm gap-1.5"
+            disabled={deleteMut.isPending}
+            onClick={() => {
+              if (confirm(`¿Eliminar al suscriptor "${sub.name || sub.email}"? Esta acción no se puede deshacer.`)) {
+                deleteMut.mutate();
+              }
+            }}
+          >
+            <Trash2 size={13} />
+            {deleteMut.isPending ? "Eliminando…" : "Eliminar"}
+          </Button>
+          <div className="flex-1" />
+          <Button variant="outline" className="h-9 text-sm" onClick={onClose}>Cerrar</Button>
+          <Button
+            className="h-9 text-sm"
             disabled={updateMut.isPending}
             onClick={() => updateMut.mutate({ name, email, status, lists: subListIds })}
           >

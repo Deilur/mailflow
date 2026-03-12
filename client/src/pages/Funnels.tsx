@@ -124,11 +124,11 @@ export default function Funnels() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 self-center">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7"
+                          className="h-8 w-8"
                           title={f.status === "active" ? "Pausar" : "Activar"}
                           onClick={() => toggleStatus.mutate({
                             id: f.id,
@@ -136,22 +136,26 @@ export default function Funnels() {
                           })}
                           data-testid={`button-toggle-funnel-${f.id}`}
                         >
-                          {f.status === "active" ? <Pause size={13} /> : <Play size={13} />}
+                          {f.status === "active" ? <Pause size={14} /> : <Play size={14} />}
                         </Button>
                         <Link href={`/funnels/${f.id}`}>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver detalle">
-                            <ChevronRight size={13} />
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalle">
+                            <ChevronRight size={14} />
                           </Button>
                         </Link>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-8 w-8 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Eliminar"
-                          onClick={() => deleteFunnel.mutate(f.id)}
+                          onClick={() => {
+                            if (confirm(`¿Eliminar el funnel "${f.name}"? Esta acción no se puede deshacer.`)) {
+                              deleteFunnel.mutate(f.id);
+                            }
+                          }}
                           data-testid={`button-delete-funnel-${f.id}`}
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </Button>
                       </div>
                     </div>

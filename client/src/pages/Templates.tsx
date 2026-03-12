@@ -11,9 +11,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+const TYPE_META: Record<string, { label: string; class: string }> = {
+  campaign:        { label: "Campaña",        class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
+  tx:              { label: "Transaccional",  class: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" },
+  campaign_visual: { label: "Visual",         class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+};
 
 function TemplateEditor({
   open, onClose, template,
@@ -23,6 +32,8 @@ function TemplateEditor({
   const isEdit = !!template;
 
   const [name, setName] = useState(template?.name ?? "");
+  const [type, setType] = useState<string>(template?.type ?? "campaign");
+  const [subject, setSubject] = useState(template?.subject ?? "");
   const defaultBody = `<!DOCTYPE html>
 <html>
 <head>
@@ -61,15 +72,41 @@ function TemplateEditor({
           </DialogHeader>
 
           <div className="space-y-3 mt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Nombre *</Label>
-              <Input
-                className="h-9"
-                placeholder="Ej: Newsletter semanal"
-                value={name}
-                onChange={e => setName(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nombre *</Label>
+                <Input
+                  className="h-9"
+                  placeholder="Ej: Newsletter semanal"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Tipo</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="campaign">Campaña</SelectItem>
+                    <SelectItem value="tx">Transaccional</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {type === "tx" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Asunto (subject)</Label>
+                <Input
+                  className="h-9"
+                  placeholder="Ej: Confirmación de registro"
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -99,7 +136,7 @@ function TemplateEditor({
             <Button
               className="flex-1 h-9 text-sm gap-1.5"
               disabled={saveMut.isPending || !name.trim()}
-              onClick={() => saveMut.mutate({ name, body, type: "campaign" })}
+              onClick={() => saveMut.mutate({ name, body, type, ...(type === "tx" && subject ? { subject } : {}) })}
             >
               <Save size={13} />
               {saveMut.isPending ? "Guardando..." : "Guardar"}
@@ -130,9 +167,13 @@ export default function Templates() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const templatesQuery = useQuery<any>({ queryKey: ["/api/listmonk/templates"] });
-  const templates: any[] = templatesQuery.data?.data ?? [];
+  const allTemplates: any[] = templatesQuery.data?.data ?? [];
+  const templates = typeFilter === "all"
+    ? allTemplates
+    : allTemplates.filter((t: any) => t.type === typeFilter);
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/listmonk/templates/${id}`),
@@ -173,6 +214,21 @@ export default function Templates() {
         </Button>
       </div>
 
+      {/* Filter */}
+      <div className="flex items-center gap-2">
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="h-8 text-sm w-[180px]">
+            <SelectValue placeholder="Todos los tipos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            <SelectItem value="campaign">Campaña</SelectItem>
+            <SelectItem value="tx">Transaccional</SelectItem>
+            <SelectItem value="campaign_visual">Visual</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {templatesQuery.isLoading
           ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)
@@ -184,7 +240,12 @@ export default function Templates() {
                     <FileCode size={16} className="text-muted-foreground shrink-0" />
                     <span className="font-medium text-sm truncate">{t.name}</span>
                   </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
+                    {t.type && TYPE_META[t.type] && (
+                      <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", TYPE_META[t.type].class)}>
+                        {TYPE_META[t.type].label}
+                      </Badge>
+                    )}
                     {t.is_default && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">default</Badge>
                     )}

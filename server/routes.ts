@@ -550,6 +550,16 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json({ data: r.data?.data });
   }));
 
+  // Delete subscriber
+  app.delete("/api/subscribers/:id", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) {
+      return res.json({ ok: true });
+    }
+    const lm = getListmonkClient();
+    await lm.delete(`/api/subscribers/${req.params.id}`);
+    res.json({ ok: true });
+  }));
+
   // Create subscriber
   app.post("/api/subscribers", asyncRoute(async (req, res) => {
     if (!LISTMONK_ENABLED) {
