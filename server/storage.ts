@@ -331,7 +331,22 @@ export class MemStorage implements IStorage {
   async upsertNewsletterSettings(data: InsertNewsletterSettings): Promise<NewsletterSettings> {
     const existing = await this.getNewsletterSettingsByListId(data.listmonkListId);
     const id = existing?.id ?? randomUUID();
-    const record: NewsletterSettings = { ...data, id, createdAt: existing?.createdAt ?? new Date(), updatedAt: new Date() };
+    const record: NewsletterSettings = {
+      id,
+      listmonkListId: data.listmonkListId,
+      displayName: data.displayName,
+      fromEmail: data.fromEmail,
+      fromName: data.fromName,
+      description: data.description ?? null,
+      replyTo: data.replyTo ?? null,
+      logoUrl: data.logoUrl ?? null,
+      brandColor: data.brandColor ?? "#3b82f6",
+      templateHeader: data.templateHeader ?? null,
+      templateFooter: data.templateFooter ?? null,
+      templateCss: data.templateCss ?? null,
+      createdAt: existing?.createdAt ?? new Date(),
+      updatedAt: new Date(),
+    };
     this.newsletterSettings.set(id, record);
     return record;
   }
@@ -340,7 +355,16 @@ export class MemStorage implements IStorage {
   async getFunnelById(id: string) { return this.funnels.get(id); }
   async createFunnel(data: InsertFunnel): Promise<Funnel> {
     const id = randomUUID();
-    const f: Funnel = { ...data, id, createdAt: new Date(), updatedAt: new Date() };
+    const f: Funnel = {
+      id,
+      name: data.name,
+      description: data.description ?? null,
+      listmonkListId: data.listmonkListId,
+      status: data.status ?? "draft",
+      entryPolicy: data.entryPolicy ?? "once",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
     this.funnels.set(id, f);
     return f;
   }
@@ -357,7 +381,14 @@ export class MemStorage implements IStorage {
   }
   async upsertFunnelSteps(funnelId: string, steps: InsertFunnelStep[]): Promise<FunnelStep[]> {
     Array.from(this.funnelSteps.values()).filter(s => s.funnelId === funnelId).forEach(s => this.funnelSteps.delete(s.id));
-    const created: FunnelStep[] = steps.map(s => ({ ...s, id: randomUUID(), createdAt: new Date() }));
+    const created: FunnelStep[] = steps.map(s => ({
+      id: randomUUID(),
+      funnelId: s.funnelId,
+      position: s.position ?? 0,
+      stepType: s.stepType,
+      config: s.config ?? {},
+      createdAt: new Date(),
+    }));
     created.forEach(s => this.funnelSteps.set(s.id, s));
     return created;
   }

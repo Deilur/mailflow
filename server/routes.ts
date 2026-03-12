@@ -8,6 +8,8 @@ import {
 } from "./listmonk";
 import { insertNewsletterSettingsSchema, insertFunnelSchema, insertFunnelStepSchema } from "@shared/schema";
 import { z } from "zod";
+import multer from "multer";
+import * as XLSX from "xlsx";
 
 /**
  * Whether we can reach ListMonk.
@@ -457,6 +459,73 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const lm = getListmonkClient();
     const r = await lm.put(`/api/subscribers/${req.params.id}`, req.body);
     res.json({ data: r.data?.data });
+  }));
+
+  // Create subscriber
+  app.post("/api/subscribers", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) {
+      return res.status(201).json({ data: { id: Date.now(), ...req.body } });
+    }
+    const lm = getListmonkClient();
+    const body = {
+      email: req.body.email,
+      name: req.body.name ?? "",
+      status: req.body.status ?? "enabled",
+      lists: (req.body.lists ?? []).map(Number),
+      preconfirm_subscriptions: true,
+    };
+    const r = await lm.post("/api/subscribers", body);
+    res.status(201).json({ data: r.data?.data });
+  }));
+
+  // Import subscribers from CSV/Excel
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+  app.post("/api/subscribers/import", upload.single("file"), asyncRoute(async (req: any, res) => {
+    if (!LISTMONK_ENABLED) {
+      return res.json({ data: { imported: 0, message: "Modo demo" } });
+    }
+    if (!req.file) return res.status(400).json({ error: "Archivo requerido" });
+
+    let csvContent: string;
+    const originalName: string = req.file.originalname ?? "";
+    const ext = originalName.split(".").pop()?.toLowerCase();
+
+    if (ext === "xlsx" || ext === "xls") {
+      // Convert Excel to CSV
+      const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      csvContent = XLSX.utils.sheet_to_csv(sheet);
+    } else {
+      // Assume CSV
+      csvContent = req.file.buffer.toString("utf-8");
+    }
+
+    const listIds = (req.body.lists ?? "")
+      .split(",")
+      .map(Number)
+      .filter(Boolean);
+    const mode = req.body.mode ?? "subscribe";
+
+    // Send to ListMonk import endpoint using multipart
+    const FormData = (await import("form-data")).default;
+    const form = new FormData();
+    form.append("params", JSON.stringify({
+      mode,
+      delim: ",",
+      lists: listIds,
+      overwrite: mode === "subscribe",
+    }));
+    form.append("file", Buffer.from(csvContent, "utf-8"), {
+      filename: "import.csv",
+      contentType: "text/csv",
+    });
+
+    const lm = getListmonkClient();
+    const r = await lm.post("/api/import/subscribers", form, {
+      headers: form.getHeaders(),
+    });
+
+    res.json({ data: r.data?.data ?? { message: "Importación iniciada" } });
   }));
 
   // ── CREATE CAMPAIGN ──────────────────────────────────────────────────────

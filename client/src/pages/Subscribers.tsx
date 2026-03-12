@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Search, UserPlus, CheckCircle2, XCircle, AlertTriangle,
   Mail, BarChart2, List, RefreshCw, ChevronLeft, ChevronRight,
+  Upload, Save, FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,6 +287,248 @@ function SubscriberModal({
   );
 }
 
+// ── New Subscriber modal ──────────────────────────────────────────────────────
+
+function NewSubscriberModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState("enabled");
+  const [selectedLists, setSelectedLists] = useState<number[]>([]);
+
+  const allLists = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
+  const availableLists: any[] = allLists.data?.data ?? [];
+
+  const createMut = useMutation({
+    mutationFn: (body: any) => apiRequest("POST", "/api/subscribers", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      toast({ title: "Suscriptor creado" });
+      onClose();
+      setEmail(""); setName(""); setStatus("enabled"); setSelectedLists([]);
+    },
+    onError: (err: any) => toast({
+      title: "Error al crear suscriptor",
+      description: err?.message ?? "Verifica que el email no esté duplicado",
+      variant: "destructive",
+    }),
+  });
+
+  const listsInSub = availableLists.filter(l => selectedLists.includes(l.id));
+  const listsNotInSub = availableLists.filter(l => !selectedLists.includes(l.id));
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Nuevo suscriptor</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Email *</Label>
+            <Input className="h-9" placeholder="correo@ejemplo.com" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Nombre</Label>
+            <Input className="h-9" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Estado</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="enabled">Activo</SelectItem>
+                <SelectItem value="disabled">Desactivado</SelectItem>
+                <SelectItem value="blocklisted">Bloqueado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Newsletters</Label>
+            {listsInSub.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {listsInSub.map(l => (
+                  <span key={l.id} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                    {l.name}
+                    <button type="button" className="hover:text-destructive" onClick={() => setSelectedLists(ids => ids.filter(id => id !== l.id))}>
+                      <XCircle size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {listsNotInSub.length > 0 && (
+              <Select onValueChange={v => setSelectedLists(ids => [...ids, Number(v)])}>
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue placeholder="Agregar a newsletter…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {listsNotInSub.map(l => (
+                    <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 mt-4 pt-3 border-t border-border">
+          <Button variant="outline" className="flex-1 h-9 text-sm" onClick={onClose}>Cancelar</Button>
+          <Button
+            className="flex-1 h-9 text-sm gap-1.5"
+            disabled={createMut.isPending || !email.trim()}
+            onClick={() => createMut.mutate({ email, name, status, lists: selectedLists })}
+          >
+            <Save size={13} />
+            {createMut.isPending ? "Creando…" : "Crear suscriptor"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Import modal ──────────────────────────────────────────────────────────────
+
+function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedLists, setSelectedLists] = useState<number[]>([]);
+  const [mode, setMode] = useState("subscribe");
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const allLists = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
+  const availableLists: any[] = allLists.data?.data ?? [];
+
+  const listsInSub = availableLists.filter(l => selectedLists.includes(l.id));
+  const listsNotInSub = availableLists.filter(l => !selectedLists.includes(l.id));
+
+  const handleImport = async () => {
+    if (!file || selectedLists.length === 0) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("lists", selectedLists.join(","));
+      formData.append("mode", mode);
+
+      const res = await fetch("/api/subscribers/import", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error en importación");
+
+      qc.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      toast({ title: "Importación iniciada", description: "Los suscriptores se procesarán en segundo plano" });
+      onClose();
+      setFile(null); setSelectedLists([]); setMode("subscribe");
+    } catch (err: any) {
+      toast({ title: "Error al importar", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Importar suscriptores</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Archivo (CSV o Excel) *</Label>
+            <div
+              className={cn(
+                "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                "hover:border-primary/50 hover:bg-primary/5",
+                file ? "border-primary/30 bg-primary/5" : "border-border"
+              )}
+              onClick={() => fileRef.current?.click()}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                className="hidden"
+                onChange={e => setFile(e.target.files?.[0] ?? null)}
+              />
+              {file ? (
+                <div className="flex items-center justify-center gap-2">
+                  <FileSpreadsheet size={16} className="text-primary" />
+                  <span className="text-sm font-medium">{file.name}</span>
+                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={e => { e.stopPropagation(); setFile(null); }}>
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Upload size={20} className="mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Click para seleccionar archivo</p>
+                  <p className="text-xs text-muted-foreground mt-1">CSV o Excel (.xlsx, .xls)</p>
+                </>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              El archivo debe tener columnas: <strong>email</strong> (obligatorio) y opcionalmente <strong>name</strong>
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Newsletters destino *</Label>
+            {listsInSub.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {listsInSub.map(l => (
+                  <span key={l.id} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                    {l.name}
+                    <button type="button" className="hover:text-destructive" onClick={() => setSelectedLists(ids => ids.filter(id => id !== l.id))}>
+                      <XCircle size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {listsNotInSub.length > 0 && (
+              <Select onValueChange={v => setSelectedLists(ids => [...ids, Number(v)])}>
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue placeholder="Seleccionar newsletter…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {listsNotInSub.map(l => (
+                    <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Modo</Label>
+            <Select value={mode} onValueChange={setMode}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="subscribe">Suscribir (agregar a listas)</SelectItem>
+                <SelectItem value="blocklist">Bloquear</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-4 pt-3 border-t border-border">
+          <Button variant="outline" className="flex-1 h-9 text-sm" onClick={onClose}>Cancelar</Button>
+          <Button
+            className="flex-1 h-9 text-sm gap-1.5"
+            disabled={importing || !file || selectedLists.length === 0}
+            onClick={handleImport}
+          >
+            <Upload size={13} />
+            {importing ? "Importando…" : "Importar"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Subscribers page ─────────────────────────────────────────────────────
 
 export default function Subscribers() {
@@ -296,6 +539,8 @@ export default function Subscribers() {
   const [page, setPage] = useState(1);
   const [listFilter, setListFilter] = useState("all");
   const [selected, setSelected] = useState<any>(null);
+  const [newSubOpen, setNewSubOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const perPage = 25;
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -346,6 +591,12 @@ export default function Subscribers() {
             title="Actualizar"
           >
             <RefreshCw size={14} />
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setImportOpen(true)}>
+            <Upload size={14} /> Importar
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => setNewSubOpen(true)}>
+            <UserPlus size={14} /> Nuevo
           </Button>
         </div>
       </div>
@@ -482,6 +733,12 @@ export default function Subscribers() {
           onClose={() => setSelected(null)}
         />
       )}
+
+      {/* New subscriber modal */}
+      <NewSubscriberModal open={newSubOpen} onClose={() => setNewSubOpen(false)} />
+
+      {/* Import modal */}
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
