@@ -13,6 +13,7 @@ import Funnels from "./pages/Funnels";
 import FunnelDetail from "./pages/FunnelDetail";
 import FunnelBuilder from "./pages/FunnelBuilder";
 import Subscribers from "./pages/Subscribers";
+import SuperSubscribers from "./pages/SuperSubscribers";
 import NewCampaign from "./pages/NewCampaign";
 import NotFound from "./pages/not-found";
 
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route path="/funnels/:id/edit" component={FunnelBuilder} />
         <Route path="/funnels/:id" component={FunnelDetail} />
         <Route path="/subscribers" component={Subscribers} />
+        <Route path="/super-subscribers" component={SuperSubscribers} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

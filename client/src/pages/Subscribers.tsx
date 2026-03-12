@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search, UserPlus, CheckCircle2, XCircle, AlertTriangle,
   Mail, BarChart2, List, RefreshCw, ChevronLeft, ChevronRight,
@@ -291,11 +291,22 @@ function SubscriberModal({
 export default function Subscribers() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [listFilter, setListFilter] = useState("all");
   const [selected, setSelected] = useState<any>(null);
   const perPage = 25;
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
 
   const query = useQuery<any>({
     queryKey: ["/api/subscribers", page, search, listFilter],
@@ -346,8 +357,8 @@ export default function Subscribers() {
           <Input
             className="pl-8 h-8 text-sm"
             placeholder="Buscar por email o nombre…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
           />
         </div>
         <Select value={listFilter} onValueChange={v => { setListFilter(v); setPage(1); }}>

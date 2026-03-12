@@ -402,7 +402,11 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
     const lm = getListmonkClient();
     const params: Record<string, any> = { page, per_page: perPage, order_by: "created_at", order: "DESC" };
-    if (query)  params.query = query;
+    if (query) {
+      // ListMonk expects SQL-like expressions for subscriber search
+      const escaped = query.replace(/'/g, "''");
+      params.query = `(subscribers.email ILIKE '%${escaped}%' OR subscribers.name ILIKE '%${escaped}%')`;
+    }
     if (listId) params.list_id = listId;
     const r = await lm.get("/api/subscribers", { params });
     res.json({ data: r.data?.data });
@@ -463,6 +467,66 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const lm = getListmonkClient();
     const r = await lm.post("/api/lists", req.body);
     res.status(201).json({ data: r.data?.data });
+  }));
+
+  // ── SUPER SUBSCRIBERS ────────────────────────────────────────────────────
+
+  app.get("/api/stats/super-subscribers", asyncRoute(async (req, res) => {
+    const listIds = (req.query.lists as string ?? "").split(",").map(Number).filter(Boolean);
+
+    if (!LISTMONK_ENABLED || listIds.length < 2) {
+      return res.json({ data: { subscribers: [], counts: [] } });
+    }
+
+    // Query ListMonk's DB directly for subscribers in multiple selected lists
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) return res.json({ data: { subscribers: [], counts: [] } });
+
+    const { Pool } = require("pg");
+    const pool = new Pool({ connectionString: dbUrl });
+
+    try {
+      // Get subscribers that are in 2+ of the selected lists
+      const result = await pool.query(`
+        SELECT s.id, s.email, s.name, s.status,
+               array_agg(sl.list_id ORDER BY sl.list_id) AS list_ids,
+               COUNT(DISTINCT sl.list_id)::int AS list_count
+        FROM public.subscribers s
+        JOIN public.subscriber_lists sl ON s.id = sl.subscriber_id
+        WHERE sl.list_id = ANY($1)
+          AND sl.status != 'unsubscribed'
+        GROUP BY s.id, s.email, s.name, s.status
+        HAVING COUNT(DISTINCT sl.list_id) >= 2
+        ORDER BY COUNT(DISTINCT sl.list_id) DESC, s.email ASC
+        LIMIT 500
+      `, [listIds]);
+
+      // Get count breakdown: how many subs share exactly 2, 3, 4... lists
+      const countResult = await pool.query(`
+        SELECT shared_count, COUNT(*)::int AS subscriber_count
+        FROM (
+          SELECT s.id, COUNT(DISTINCT sl.list_id)::int AS shared_count
+          FROM public.subscribers s
+          JOIN public.subscriber_lists sl ON s.id = sl.subscriber_id
+          WHERE sl.list_id = ANY($1)
+            AND sl.status != 'unsubscribed'
+          GROUP BY s.id
+          HAVING COUNT(DISTINCT sl.list_id) >= 2
+        ) sub
+        GROUP BY shared_count
+        ORDER BY shared_count DESC
+      `, [listIds]);
+
+      res.json({
+        data: {
+          subscribers: result.rows,
+          counts: countResult.rows,
+          total: countResult.rows.reduce((a: number, r: any) => a + r.subscriber_count, 0),
+        }
+      });
+    } finally {
+      await pool.end();
+    }
   }));
 
   // Global Express error handler (catches asyncRoute errors)

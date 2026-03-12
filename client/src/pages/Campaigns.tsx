@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Pencil, Send, BarChart2, Clock, CheckCircle2, FileText, Play } from "lucide-react";
+import { Pencil, Send, BarChart2, Clock, CheckCircle2, FileText, Play, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -16,12 +20,26 @@ const STATUS: Record<string, { label: string; icon: any; class: string }> = {
 
 export default function Campaigns() {
   const [, nav] = useLocation();
+  const [listFilter, setListFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const campaigns = useQuery<any>({ queryKey: ["/api/listmonk/campaigns"] });
   const settings = useQuery<any>({ queryKey: ["/api/newsletter-settings"] });
+  const listsQuery = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
 
-  const data: any[] = campaigns.data?.data ?? [];
+  const allLists: any[] = listsQuery.data?.data ?? [];
+  const rawData: any[] = campaigns.data?.data ?? [];
   const settingsData: any[] = settings.data?.data ?? [];
   const settingsMap = Object.fromEntries(settingsData.map(s => [s.listmonkListId, s]));
+
+  // Filter by list
+  const filtered = listFilter === "all" ? rawData : rawData.filter(c => String(c.list_id) === listFilter);
+
+  // Sort by date
+  const data = [...filtered].sort((a, b) => {
+    const da = new Date(a.send_at ?? a.created_at ?? 0).getTime();
+    const db = new Date(b.send_at ?? b.created_at ?? 0).getTime();
+    return sortOrder === "desc" ? db - da : da - db;
+  });
 
   return (
     <div className="space-y-5">
@@ -32,6 +50,30 @@ export default function Campaigns() {
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => nav("/campaigns/new")} data-testid="button-new-campaign">
           <Send size={14} /> Nueva campaña
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={listFilter} onValueChange={setListFilter}>
+          <SelectTrigger className="h-8 text-sm w-[200px]">
+            <SelectValue placeholder="Todas las newsletters" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las newsletters</SelectItem>
+            {allLists.map((l: any) => (
+              <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() => setSortOrder(o => o === "desc" ? "asc" : "desc")}
+        >
+          <ArrowUpDown size={12} />
+          {sortOrder === "desc" ? "Más recientes" : "Más antiguas"}
         </Button>
       </div>
 

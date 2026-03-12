@@ -39,17 +39,20 @@ export default function Dashboard() {
   const dailySubs = useQuery<any>({ queryKey: ["/api/stats/daily-subscribers"] });
   const emailStats = useQuery<any>({ queryKey: ["/api/stats/email-activity"] });
   const listsQuery = useQuery<any>({ queryKey: ["/api/listmonk/lists"] });
+  const settingsQuery = useQuery<any>({ queryKey: ["/api/newsletter-settings"] });
 
   const k = kpis.data?.data;
   const lists: { id: number; name: string }[] = listsQuery.data?.data ?? [];
+  const settingsData: any[] = settingsQuery.data?.data ?? [];
+  const brandColorMap = Object.fromEntries(settingsData.map((s: any) => [s.listmonkListId, s.brandColor]));
 
-  // Build dynamic name/color maps from real list data
+  // Build dynamic name/color maps — use brandColor from settings, fallback to palette
   const listNames: Record<string, string> = {};
   const listColors: Record<string, string> = {};
   lists.forEach((l, i) => {
     const key = `list_${l.id}`;
     listNames[key] = l.name;
-    listColors[key] = PALETTE[i % PALETTE.length];
+    listColors[key] = brandColorMap[l.id] ?? PALETTE[i % PALETTE.length];
   });
 
   const CustomTooltip = ({ active, payload, label }: any) => {

@@ -3,7 +3,7 @@ import { useHashLocation } from "wouter/use-hash-location";
 import { useState } from "react";
 import {
   LayoutDashboard, Mail, Megaphone, Workflow,
-  ChevronLeft, ChevronRight, Moon, Sun, Users
+  ChevronLeft, ChevronRight, Moon, Sun, Users, Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,8 +11,9 @@ const NAV = [
   { href: "/",            label: "Dashboard",     icon: LayoutDashboard },
   { href: "/newsletters", label: "Newsletters",    icon: Mail },
   { href: "/campaigns",   label: "Campañas",       icon: Megaphone },
-  { href: "/subscribers", label: "Suscriptores",   icon: Users },
-  { href: "/funnels",     label: "Funnels",        icon: Workflow },
+  { href: "/subscribers",       label: "Suscriptores",      icon: Users },
+  { href: "/super-subscribers", label: "Super Suscriptores", icon: Star },
+  { href: "/funnels",           label: "Funnels",            icon: Workflow },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
