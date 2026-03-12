@@ -3,7 +3,7 @@ import { useHashLocation } from "wouter/use-hash-location";
 import { useState } from "react";
 import {
   LayoutDashboard, Mail, Megaphone, Workflow,
-  ChevronLeft, ChevronRight, Moon, Sun, Users, Star
+  ChevronLeft, ChevronRight, Moon, Sun, Users, Star, FileCode
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/campaigns",   label: "Campañas",       icon: Megaphone },
   { href: "/subscribers",       label: "Suscriptores",      icon: Users },
   { href: "/super-subscribers", label: "Super Suscriptores", icon: Star },
+  { href: "/templates",         label: "Templates",          icon: FileCode },
   { href: "/funnels",           label: "Funnels",            icon: Workflow },
 ];
 

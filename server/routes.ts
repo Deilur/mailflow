@@ -106,19 +106,48 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }))});
   }));
 
-  // Templates (for funnel builder)
+  // Templates
   app.get("/api/listmonk/templates", asyncRoute(async (_req, res) => {
     if (!LISTMONK_ENABLED) {
       return res.json({ data: [
-        { id: 1, name: "Bienvenida v2",      subject: "¡Bienvenido!" },
-        { id: 2, name: "Recursos semana",    subject: "Los mejores recursos" },
-        { id: 3, name: "Re-engagement",      subject: "Te echamos de menos" },
-        { id: 4, name: "Oferta especial",    subject: "Una oferta para ti" },
-        { id: 5, name: "Newsletter semanal", subject: "Esta semana en {{list_name}}" },
+        { id: 1, name: "Bienvenida v2", subject: "¡Bienvenido!", type: "campaign", is_default: false },
+        { id: 2, name: "Recursos semana", subject: "Los mejores recursos", type: "campaign", is_default: false },
       ]});
     }
     const templates = await listTemplates();
-    res.json({ data: templates.map(t => ({ id: t.id, name: t.name, subject: t.subject })) });
+    res.json({ data: templates });
+  }));
+
+  app.get("/api/listmonk/templates/:id", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) return res.json({ data: null });
+    const lm = getListmonkClient();
+    const r = await lm.get(`/api/templates/${req.params.id}`);
+    res.json({ data: r.data?.data });
+  }));
+
+  app.post("/api/listmonk/templates", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) {
+      return res.status(201).json({ data: { id: Date.now(), ...req.body } });
+    }
+    const lm = getListmonkClient();
+    const r = await lm.post("/api/templates", req.body);
+    res.status(201).json({ data: r.data?.data });
+  }));
+
+  app.put("/api/listmonk/templates/:id", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) {
+      return res.json({ data: { id: req.params.id, ...req.body } });
+    }
+    const lm = getListmonkClient();
+    const r = await lm.put(`/api/templates/${req.params.id}`, req.body);
+    res.json({ data: r.data?.data });
+  }));
+
+  app.delete("/api/listmonk/templates/:id", asyncRoute(async (req, res) => {
+    if (!LISTMONK_ENABLED) return res.json({ ok: true });
+    const lm = getListmonkClient();
+    await lm.delete(`/api/templates/${req.params.id}`);
+    res.json({ ok: true });
   }));
 
   // Campaigns
