@@ -34,42 +34,6 @@ function KpiCard({
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs">
-      <p className="font-medium mb-2 text-muted-foreground">
-        {format(parseISO(label), "d MMM", { locale: es })}
-      </p>
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-          <span className="text-muted-foreground">{listNames[p.dataKey] ?? p.dataKey}:</span>
-          <span className="font-medium">{p.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const EmailTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs">
-      <p className="font-medium mb-2 text-muted-foreground">
-        {format(parseISO(label), "d MMM", { locale: es })}
-      </p>
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-          <span className="text-muted-foreground capitalize">{p.name}:</span>
-          <span className="font-medium">{p.value.toLocaleString()}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 export default function Dashboard() {
   const kpis = useQuery<any>({ queryKey: ["/api/stats/kpis"] });
   const dailySubs = useQuery<any>({ queryKey: ["/api/stats/daily-subscribers"] });
@@ -87,6 +51,42 @@ export default function Dashboard() {
     listNames[key] = l.name;
     listColors[key] = PALETTE[i % PALETTE.length];
   });
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs">
+        <p className="font-medium mb-2 text-muted-foreground">
+          {format(parseISO(label), "d MMM", { locale: es })}
+        </p>
+        {payload.map((p: any) => (
+          <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="text-muted-foreground">{listNames[p.dataKey] ?? p.dataKey}:</span>
+            <span className="font-medium">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const EmailTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs">
+        <p className="font-medium mb-2 text-muted-foreground">
+          {format(parseISO(label), "d MMM", { locale: es })}
+        </p>
+        {payload.map((p: any) => (
+          <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="text-muted-foreground capitalize">{p.name}:</span>
+            <span className="font-medium">{p.value.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const subsData = (dailySubs.data?.data ?? []).map((d: any) => ({
     ...d,
